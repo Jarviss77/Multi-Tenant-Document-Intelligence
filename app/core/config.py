@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     PINECONE_API_KEY: str = os.getenv("PINECONE_API_KEY")
     PINECONE_INDEX_NAME: str = os.getenv("PINECONE_INDEX_NAME", "quickstart")
 
+    KAFKA_BROKER: str = os.getenv("KAFKA_BROKER", "localhost:9092")
+    KAFKA_TOPIC: str = os.getenv("KAFKA_TOPIC", "document_events")
+
     class Config:
         env_file = ".env"
 
