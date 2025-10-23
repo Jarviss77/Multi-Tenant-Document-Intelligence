@@ -1,0 +1,21 @@
+Log file created: Tue Dec  6 01:12:54 2022
+-------------------------------------------
+Ticks = 287      <89053> <DynamicLink> <5> Increase wait time to 2
+Ticks = 819      <89053> <AnywhereLocalClient> <5> Local Hub HTTP port retrieved, port: 50374
+Ticks = 1142      <89051> <GPUFoundation> <5> Done loading modules, sec: 0.0682862, device: Metal(0)
+Ticks = 2022      <88704> <VideoFilterHost.LoadPlugins> <5> EffectMain entry point not found: RGB Curvesmay be related to plugins with missing architectures mac x86_64/arm64 for example
+Ticks = 2775      <88704> <VideoFilterHost.LoadPlugins> <5> EffectMain entry point not found: Auto Levelsmay be related to plugins with missing architectures mac x86_64/arm64 for example
+Ticks = 3640      <88704> <VideoFilterHost.LoadPlugins> <5> EffectMain entry point not found: Auto Colormay be related to plugins with missing architectures mac x86_64/arm64 for example
+Ticks = 4328      <88704> <VideoFilterHost.LoadPlugins> <5> EffectMain entry point not found: Auto Contrastmay be related to plugins with missing architectures mac x86_64/arm64 for example
+Ticks = 4413      <88704> <VideoFilterHost.LoadPlugins> <5> EffectMain entry point not found: Luma Correctormay be related to plugins with missing architectures mac x86_64/arm64 for example
+Ticks = 4651      <88704> <VideoFilterHost.LoadPlugins> <5> EffectMain entry point not found: Three-Way Color Correctormay be related to plugins with missing architectures mac x86_64/arm64 for example
+Ticks = 6007      <88704> <VideoFilterHost.LoadPlugins> <5> EffectMain entry point not found: Fast Color Correctormay be related to plugins with missing architectures mac x86_64/arm64 for example
+Ticks = 7319      <88704> <VideoFilterHost.LoadPlugins> <5> EffectMain entry point not found: RGB Color Correctormay be related to plugins with missing architectures mac x86_64/arm64 for example
+Ticks = 7949      <88704> <VideoFilterHost.LoadPlugins> <5> EffectMain entry point not found: Shadow/Highlightmay be related to plugins with missing architectures mac x86_64/arm64 for example
+Ticks = 10551      <88704> <VideoFilterHost.LoadPlugins> <5> EffectMain entry point not found: Luma Curvemay be related to plugins with missing architectures mac x86_64/arm64 for example
+Ticks = 11671      <88704> <AMEApp> <0> Time taken to load MediaCore plugins: 10594.6 milliseconds.
+Ticks = 12052      <88704> <AMEApp> <1> Entering RunEventLoop
+Ticks = 23366      <88704> <AMEApp> <1> Exited RunEventLoop
+-------------------------------------------
+Log file closed: Tue Dec  6 01:13:17 2022
+

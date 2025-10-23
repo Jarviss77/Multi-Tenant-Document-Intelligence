@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.sessions import get_db
 from app.db.models.tenant import Tenant
@@ -20,14 +21,13 @@ class TenantResponse(BaseModel):
     email: str
     api_key: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.post("/onboard", response_model=TenantResponse, summary="Register tenant and generate API key")
 async def onboard_tenant(payload: TenantCreate, db: AsyncSession = Depends(get_db)):
     existing_tenant = await db.execute(
-        Tenant.__table__.select().where(
+        select(Tenant).where(
             (Tenant.name == payload.name) | (Tenant.email == payload.email)
         )
     )
@@ -56,12 +56,12 @@ async def onboard_tenant(payload: TenantCreate, db: AsyncSession = Depends(get_d
         api_key=plain_api_key
     )
 
-@router.get
 
+# testing route to get tenant details by id
 @router.get("/tenant/{tenant_id}", response_model=TenantResponse, summary="Get tenant details by ID")
 async def get_tenant(tenant_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        Tenant.__table__.select().where(Tenant.id == tenant_id)
+        select(Tenant).where(Tenant.id == tenant_id)
     )
     tenant = result.scalar_one_or_none()
 
