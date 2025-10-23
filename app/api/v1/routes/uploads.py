@@ -2,17 +2,18 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from typing import List
 from app.services.storage_service import StorageService
 from app.core.auth import get_tenant_from_api_key
+from app.core.rate_limiter import rate_limit_dependency
+from app.core.config import settings
 import os
 
 router = APIRouter()
 
 storage_service = StorageService()
 
-@router.post("/")
+@router.post("/", dependencies=[Depends(rate_limit_dependency(action="uploads", max_requests=settings.UPLOADS_PER_MINUTE, window_seconds=60))])
 async def upload_file(
     file: UploadFile = File(...),
-    tenant=Depends(get_tenant_from_api_key)
-):
+    tenant=Depends(get_tenant_from_api_key)):
     """Upload a file and store it locally under /uploads/{tenant_id}/."""
     file_path = await storage_service.save_file(tenant.id, file)
     return {"message": "File uploaded successfully", "path": file_path}
