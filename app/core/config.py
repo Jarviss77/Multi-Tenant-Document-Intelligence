@@ -18,6 +18,8 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://postgres:postgres@db:5432/document_intelligence"
     )
 
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
+
     class Config:
         env_file = ".env"
 
