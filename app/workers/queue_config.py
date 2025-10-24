@@ -1,27 +1,32 @@
 import os
 import json
+import asyncio
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
 from aiokafka.errors import TopicAlreadyExistsError
 from app.core.config import settings
-import asyncio
-import logging
+from app.utils.logger import get_logger, log_kafka_message
 
-logger = logging.getLogger("workers.queue")
+logger = get_logger("workers.queue")
 
 KAFKA_BROKER = settings.KAFKA_BROKER
 TOPIC_INGESTION = settings.KAFKA_TOPIC
 
-def ensure_kafka_topic(topic_name: str, partitions: int = 3):
+async def ensure_kafka_topic(topic_name: str, partitions: int = 3):
+    """Async function to create Kafka topic"""
     admin = AIOKafkaAdminClient(bootstrap_servers=KAFKA_BROKER)
     try:
+        await admin.start()
         topic = NewTopic(name=topic_name, num_partitions=partitions, replication_factor=1)
-        admin.create_topics([topic])
-        logger.info(f"Created Kafka topic: {topic_name}")
-    except TopicAlreadyExistsError:
-        logger.info(f"Kafka topic already exists: {topic_name}")
+        try:
+            await admin.create_topics([topic])
+            logger.info(f"Created Kafka topic: {topic_name}")
+        except TopicAlreadyExistsError:
+            logger.info(f"Kafka topic already exists: {topic_name}")
+    except Exception as e:
+        logger.error(f"Error creating Kafka topic: {e}")
     finally:
-        admin.close()
+        await admin.close()
 
 
 class KafkaProducerService:
@@ -36,9 +41,11 @@ class KafkaProducerService:
 
     async def publish_job(self, job_data: dict):
         """Send JSON-encoded ingestion job to Kafka."""
+        job_id = job_data.get('job_id')
+        log_kafka_message(logger, "PUBLISH", TOPIC_INGESTION, job_id)
         msg = json.dumps(job_data).encode("utf-8")
         await self.producer.send_and_wait(TOPIC_INGESTION, msg)
-        logger.info(f"Published job to Kafka: {job_data.get('job_id')}")
+        logger.info(f"Published job to Kafka: {job_id}")
 
 
 class KafkaConsumerService:
@@ -53,7 +60,7 @@ class KafkaConsumerService:
         )
 
     async def start(self, process_func):
-        ensure_kafka_topic(TOPIC_INGESTION)
+        await ensure_kafka_topic(TOPIC_INGESTION)  # Await the async function
         await self.consumer.start()
         logger.info("Kafka consumer started... listening for ingestion jobs")
         try:

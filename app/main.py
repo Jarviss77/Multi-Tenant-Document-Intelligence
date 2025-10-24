@@ -3,6 +3,9 @@ from app.api import router
 from app.db.sessions import engine
 from app.db.base import Base
 from contextlib import asynccontextmanager
+from app.db.base import load_all_models
+
+load_all_models()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
