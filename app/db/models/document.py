@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Text, ForeignKey, DateTime
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from app.db.base import Base
 import uuid
 
@@ -12,3 +13,6 @@ class Document(Base):
     content = Column(Text, nullable=False)
     embedding_id = Column(String, nullable=True)  # links to vector store
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    tenant = relationship("Tenant", back_populates="documents")
+    embedding_jobs = relationship("EmbeddingJob", back_populates="document")

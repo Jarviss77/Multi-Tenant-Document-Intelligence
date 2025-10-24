@@ -2,6 +2,7 @@ from sqlalchemy import Column, String, ForeignKey, DateTime, Enum
 from sqlalchemy.sql import func
 from app.db.base import Base
 import enum, uuid
+from sqlalchemy.orm import relationship
 
 class JobStatus(str, enum.Enum):
     pending = "pending"
@@ -18,3 +19,6 @@ class EmbeddingJob(Base):
     status = Column(Enum(JobStatus), default=JobStatus.pending)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    tenant = relationship("Tenant", back_populates="embedding_jobs")
+    document = relationship("Document", back_populates="embedding_jobs")
