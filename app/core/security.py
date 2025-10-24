@@ -35,7 +35,7 @@ def verify_api_key(provided_key: str, stored_hash: str) -> bool:
     return secrets.compare_digest(provided_hash, stored_hash)
 
 
-def create_jwt_token(tenant_id: str, tenant_name: str, expires_delta: Optional[timedelta] = None) -> str:
+def create_jwt_token(tenant_id: str, tenant_name: str, password: str, expires_delta: Optional[timedelta] = None) -> str:
     """
     Create JWT token for tenant authentication
     """
@@ -47,10 +47,11 @@ def create_jwt_token(tenant_id: str, tenant_name: str, expires_delta: Optional[t
     payload = {
         "tenant_id": tenant_id,
         "tenant_name": tenant_name,
+        "password": password,
         "exp": expire
     }
 
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM, timeout=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 def verify_jwt_token(token: str) -> Optional[dict]:

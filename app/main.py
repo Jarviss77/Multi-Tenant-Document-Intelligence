@@ -9,7 +9,6 @@ load_all_models()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize DB tables if not already created (dev mode)."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
