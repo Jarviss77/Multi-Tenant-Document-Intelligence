@@ -14,7 +14,7 @@ class ChunkingStrategy(ABC):
 class FixedSizeChunking(ChunkingStrategy):
     """Simple fixed-size chunking with overlap."""
 
-    def chunk(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[Dict[str, Any]]:
+    def chunk(self, text: str, chunk_size: int = 100, overlap: int = 20) -> List[Dict[str, Any]]:
         chunks = []
         start = 0
 
@@ -38,7 +38,7 @@ class SentenceAwareChunking(ChunkingStrategy):
     def __init__(self, lightweight: bool = False):
         self.tokenizer = Tokenizer(lightweight=lightweight)
 
-    def chunk(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[Dict[str, Any]]:
+    def chunk(self, text: str, chunk_size: int = 100, overlap: int = 20) -> List[Dict[str, Any]]:
         if not text or not text.strip():
             return []
 

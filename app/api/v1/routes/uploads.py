@@ -94,10 +94,15 @@ async def upload_file(
             )
             logger.info(f"Created job record: {job_id}")
             db.add(job)
-            log_database_operation(logger, "INSERT", "embedding_jobs", job_id)
-            embedding_jobs.append(job)
+            embedding_jobs.append((job, chunk))
 
-            # Publish job to Kafka for async processing
+        await db.commit()
+        await db.refresh(document)
+        log_database_operation(logger, "INSERT", "embedding_jobs", job_id)
+
+
+        # Publish job to Kafka for async processing
+        for job, chunk in embedding_jobs:
             job_data = {
                 "job_id": job.id,
                 "tenant_id": tenant.id,
@@ -114,7 +119,7 @@ async def upload_file(
             await producer.publish_job(job_data)
             logger.info(f"Published embedding job {job.id} for chunk {chunk.id}")
 
-        await db.commit()
+
         logger.info(f"Created {len(embedding_jobs)} embedding jobs")
 
     except Exception as e:
@@ -145,12 +150,3 @@ async def list_uploaded_files(tenant=Depends(get_tenant_from_api_key)):
     if not os.path.exists(tenant_dir):
         return []
     return os.listdir(tenant_dir)
-
-
-@router.delete("/{filename}")
-async def delete_file(filename: str, tenant=Depends(get_tenant_from_api_key)):
-    """Delete a file belonging to the tenant."""
-    success = storage_service.delete_file(tenant.id, filename)
-    if not success:
-        raise HTTPException(status_code=404, detail="File not found")
-    return {"message": f"{filename} deleted successfully"}
