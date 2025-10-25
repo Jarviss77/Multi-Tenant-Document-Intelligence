@@ -296,9 +296,7 @@ class SearchService:
                         "document_title": doc_title,
                         "content": chunk.content if include_content else None,
                         "chunk_index": chunk.chunk_index,
-                        "total_chunks": chunk.total_chunks,
-                        "chunk_type": chunk.chunk_type,
-                        "metadata": chunk.metadata,
+                        "size": chunk.size,
                         "document_created_at": doc_created_at,
                         "chunk_created_at": chunk.created_at
                     }
@@ -319,8 +317,7 @@ class SearchService:
                         "document_title": chunk_data["document_title"],
                         "content": chunk_data["content"],
                         "chunk_index": chunk_data["chunk_index"],
-                        "total_chunks": chunk_data["total_chunks"],
-                        "chunk_type": chunk_data["chunk_type"],
+                        "size": chunk_data["size"],
                         "similarity_score": vector_result["similarity_score"],
                         "metadata": vector_result["metadata"],
                         "document_created_at": chunk_data["document_created_at"],

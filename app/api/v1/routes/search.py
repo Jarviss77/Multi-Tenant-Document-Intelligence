@@ -48,8 +48,7 @@ class ChunkSearchResult(BaseModel):
     document_title: str = Field(..., description="Document title")
     content: Optional[str] = Field(None, description="Chunk content (if requested)")
     chunk_index: int = Field(..., description="Index of chunk within document")
-    total_chunks: int = Field(..., description="Total number of chunks in document")
-    chunk_type: str = Field(..., description="Type of chunk")
+    size: int = Field(..., description="Total number of chunks in document")
     similarity_score: float = Field(..., description="Similarity score (0-1)")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
     document_created_at: datetime = Field(..., description="Document creation date")
@@ -73,61 +72,7 @@ class SearchStats(BaseModel):
     vector_search_time_ms: float = Field(..., description="Vector search time")
     db_query_time_ms: float = Field(..., description="Database query time")
 
-
-@router.post("/semantic", response_model=SearchResponse, dependencies=[Depends(rate_limit_dependency(action="searches", max_requests=settings.SEARCHES_PER_MINUTE, window_seconds=60))])
-async def semantic_search(
-    request: SearchRequest,
-    tenant=Depends(get_tenant_from_api_key)
-):
-    """
-    Perform semantic search on documents using vector similarity.
-    
-    This endpoint uses embeddings to find documents that are semantically
-    similar to the search query, rather than just keyword matching.
-    """
-    try:
-        logger.info(f"Semantic search request from tenant {tenant.id}: '{request.query}'")
-        
-        # Perform the search
-        search_results, timing_stats = await search_service.search_documents(
-            query=request.query,
-            tenant_id=tenant.id,
-            top_k=request.top_k,
-            min_score=request.min_score,
-            include_content=request.include_content,
-            filters=request.filters
-        )
-        
-        # Convert results to response format
-        results = [
-            SearchResult(
-                document_id=result["document_id"],
-                title=result["title"],
-                content=result["content"],
-                similarity_score=result["similarity_score"],
-                metadata=result["metadata"],
-                created_at=result["created_at"]
-            )
-            for result in search_results
-        ]
-        
-        response = SearchResponse(
-            query=request.query,
-            total_results=len(results),
-            results=results,
-            search_time_ms=timing_stats["search_time_ms"],
-            embedding_time_ms=timing_stats["embedding_time_ms"],
-            vector_search_time_ms=timing_stats["vector_search_time_ms"]
-        )
-        
-        logger.info(f"Search completed: {len(results)} results in {timing_stats['search_time_ms']:.2f}ms")
-        return response
-        
-    except Exception as e:
-        logger.error(f"Semantic search failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-@router.post("/chunks", response_model=ChunkSearchResponse, dependencies=[Depends(rate_limit_dependency(action="searches", max_requests=settings.SEARCHES_PER_MINUTE, window_seconds=60))])
+@router.post("/semantic", response_model=ChunkSearchResponse, dependencies=[Depends(rate_limit_dependency(action="searches", max_requests=settings.SEARCHES_PER_MINUTE, window_seconds=60))])
 async def chunk_search(
     request: SearchRequest,
     tenant=Depends(get_tenant_from_api_key)
@@ -137,7 +82,7 @@ async def chunk_search(
     Returns individual chunks that match the query, providing more granular results.
     """
     try:
-        log_request(logger, "chunk_search", tenant.id, {"query": request.query, "top_k": request.top_k})
+        # log_request(logger, "chunk_search", tenant.id, {"query": request.query, "top_k": request.top_k}, response_time=request.response_time)
         
         # Perform chunk-based search
         results, timing_stats = await search_service.search_chunks(
@@ -148,6 +93,7 @@ async def chunk_search(
             include_content=request.include_content,
             filters=request.filters
         )
+        print(results)
         
         # Convert results to response format
         chunk_results = []
@@ -158,8 +104,7 @@ async def chunk_search(
                 document_title=result["document_title"],
                 content=result["content"],
                 chunk_index=result["chunk_index"],
-                total_chunks=result["total_chunks"],
-                chunk_type=result["chunk_type"],
+                size=result["size"],
                 similarity_score=result["similarity_score"],
                 metadata=result["metadata"],
                 document_created_at=result["document_created_at"],
