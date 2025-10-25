@@ -3,9 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.chunks import Chunk
 from app.db.models.document import Document
 from sqlalchemy import select
-from app.db.sessions import get_db
-from app.core.auth import get_tenant_from_api_key
-from fastapi import Depends
 from datetime import datetime
 from app.utils.chunking import chunking_strategy
 from app.utils.logger import get_logger, log_database_operation
@@ -13,7 +10,7 @@ from app.utils.logger import get_logger, log_database_operation
 logger = get_logger("services.chunking_service")
 
 class ChunkingService:
-    def __init__(self, db: AsyncSession = Depends(get_db)):
+    def __init__(self, db: AsyncSession):
         self.db = db
 
     async def create_chunks(self, tenant_id: str, document_id: str, content: str, strategy: str) -> Document:
@@ -23,17 +20,17 @@ class ChunkingService:
         if not document or document.tenant_id != tenant_id:
             raise ValueError("Document not found or access denied")
 
-        chunks_data = chunking_strategy.chunk_document(content, tenant_id, strategy)
+        chunks_data = chunking_strategy.chunk_document(text=content, strategy=strategy)
 
         for i, chunk_data in enumerate(chunks_data):
             chunk = Chunk(
                 id=str(uuid.uuid4()),
                 document_id=document_id,
                 tenant_id=tenant_id,
-                content=chunk_data[i]['text'],
+                content=chunk_data.get("text"),
                 chunk_index=i,
-                start_char=chunk_data[i]['start_char'],
-                end_char=chunk_data[i]['end_char'],
+                start_char=chunk_data.get('start_char'),
+                end_char=chunk_data.get('end_char'),
                 size=chunks_data[i]['chunk_size'],
                 created_at=datetime.utcnow(),
             )

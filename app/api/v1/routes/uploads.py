@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 storage_service = StorageService()
-chunking_service = ChunkingService(db = get_db())
+
 
 @router.post("/", dependencies=[Depends(rate_limit_dependency(action="uploads", max_requests=settings.UPLOADS_PER_MINUTE, window_seconds=60))])
 async def upload_file(
@@ -57,6 +57,8 @@ async def upload_file(
     await db.refresh(document)
     logger.info(f"Created document record: {document_id}")
 
+    chunking_service = ChunkingService(db)
+
     await chunking_service.create_chunks(
         content=text_content,
         document_id=document_id,
@@ -71,6 +73,7 @@ async def upload_file(
             Chunk.tenant_id == tenant.id,
         ).order_by(Chunk.chunk_index)
     )
+    chunks = chunks.scalars().all()
 
     # Create embedding jobs for each chunk
     embedding_jobs = []
@@ -89,6 +92,7 @@ async def upload_file(
                 status=JobStatus.pending,
                 created_at=datetime.utcnow(),
             )
+            logger.info(f"Created job record: {job_id}")
             db.add(job)
             log_database_operation(logger, "INSERT", "embedding_jobs", job_id)
             embedding_jobs.append(job)
@@ -101,8 +105,8 @@ async def upload_file(
                 "chunk_id": chunk.id,
                 "chunk_content": chunk.content,
                 "chunk_index": chunk.chunk_index,
-                "total_chunks": chunk.total_chunks,
-                "chunk_type": chunk.chunk_type,
+                "chunk_size": chunk.size,
+                "chunk_metadata": chunk.chunk_metadata,
                 "file_path": file_path,
             }
 
@@ -130,7 +134,7 @@ async def upload_file(
         "embedding_jobs_queued": len(embedding_jobs),
         "chunking_strategy": settings.CHUNKING_STRATEGY,
         "tenant_id": tenant.id,
-        "first-5_chunks": [chunk.content for chunk in chunks.scalars().all()[:5]]
+        "first-5_chunks": [chunk.content for chunk in chunks[:5]]
     }
 
 

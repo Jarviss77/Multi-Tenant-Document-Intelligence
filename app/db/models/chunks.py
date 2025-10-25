@@ -14,8 +14,8 @@ class Chunk(Base):
     content = Column(Text, nullable=False)
     chunk_index = Column(Integer, nullable=False)
     size = Column(Integer, nullable=False)
-    start_char = Column(String)
-    end_char = Column(String)
+    start_char = Column(Integer, nullable=True)
+    end_char = Column(Integer, nullable=True)
     chunk_metadata = Column(JSON, nullable=True)  # Store additional chunk metadata
     embedding_id = Column(String, nullable=True)  # Links to vector store
     created_at = Column(DateTime(timezone=True), server_default=func.now())

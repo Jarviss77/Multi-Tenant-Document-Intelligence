@@ -27,8 +27,7 @@ async def process_ingestion_job(job_data: dict):
     chunk_id = job_data.get("chunk_id")
     chunk_content = job_data.get("chunk_content")
     chunk_index = job_data.get("chunk_index")
-    total_chunks = job_data.get("total_chunks")
-    chunk_type = job_data.get("chunk_type")
+    chunk_size = job_data.get("chunk_size")
     file_path = job_data.get("file_path")
 
     logger.info(f"Processing chunk embedding job {job_id} for tenant {tenant_id}, document {document_id}, chunk {chunk_id}")
@@ -81,8 +80,7 @@ async def process_ingestion_job(job_data: dict):
                         "tenant_id": tenant_id,
                         "job_id": job_id,
                         "chunk_index": chunk_index,
-                        "total_chunks": total_chunks,
-                        "chunk_type": chunk_type,
+                        "chunk_size": chunk_size,
                         "content_length": len(chunk_content)
                     },
                 )

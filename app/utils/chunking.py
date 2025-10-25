@@ -35,9 +35,14 @@ class FixedSizeChunking(ChunkingStrategy):
 
 
 class SentenceAwareChunking(ChunkingStrategy):
+    def __init__(self, lightweight: bool = False):
+        self.tokenizer = Tokenizer(lightweight=lightweight)
 
     def chunk(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[Dict[str, Any]]:
-        sentences = Tokenizer.tokenize(text)
+        if not text or not text.strip():
+            return []
+
+        sentences = self.tokenizer.tokenize(text=text)
 
         chunks = []
         current_chunk = ""
