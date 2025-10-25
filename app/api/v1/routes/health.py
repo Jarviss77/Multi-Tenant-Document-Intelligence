@@ -1,5 +1,6 @@
 from datetime import datetime
 from fastapi import APIRouter
+import os
 
 router = APIRouter()
 
@@ -8,5 +9,6 @@ async def health():
     return {
         "message": "Welcome to Multi-Tenant Document Management API",
         "status": "ok",
-        "timestamp": datetime.utcnow()
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "git_commit": os.getenv("GIT_COMMIT")
     }

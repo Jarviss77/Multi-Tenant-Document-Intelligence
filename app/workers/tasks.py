@@ -8,6 +8,7 @@ from app.db.sessions import AsyncSessionLocal
 from app.db.base import load_all_models
 from app.db.models.embedding_job import EmbeddingJob, JobStatus
 from app.db.models.document import Document
+from app.db.models.chunks import Chunk
 from app.utils.logger import get_logger, log_embedding_operation, log_database_operation
 
 load_all_models()
@@ -19,22 +20,27 @@ vector_store = PineconeVectorStore()
 
 
 async def process_ingestion_job(job_data: dict):
-    """Main Kafka message handler for ingestion jobs."""
+    """Main Kafka message handler for chunk embedding jobs."""
     job_id = job_data.get("job_id")
     tenant_id = job_data.get("tenant_id")
     document_id = job_data.get("document_id")
+    chunk_id = job_data.get("chunk_id")
+    chunk_content = job_data.get("chunk_content")
+    chunk_index = job_data.get("chunk_index")
+    total_chunks = job_data.get("total_chunks")
+    chunk_type = job_data.get("chunk_type")
     file_path = job_data.get("file_path")
 
-    logger.info(f"Processing ingestion job {job_id} for tenant {tenant_id}, document {document_id}")
+    logger.info(f"Processing chunk embedding job {job_id} for tenant {tenant_id}, document {document_id}, chunk {chunk_id}")
     logger.debug(f"Job data received: {job_data}")
     
     # Check if we have the required fields
-    if not file_path:
-        logger.error(f"Missing file_path in job data for job {job_id}. Skipping processing.")
+    if not chunk_content:
+        logger.error(f"Missing chunk_content in job data for job {job_id}. Skipping processing.")
         return
     
-    if not document_id:
-        logger.error(f"Missing document_id in job data for job {job_id}. Skipping processing.")
+    if not chunk_id:
+        logger.error(f"Missing chunk_id in job data for job {job_id}. Skipping processing.")
         return
 
     async with AsyncSessionLocal() as db:
@@ -57,58 +63,56 @@ async def process_ingestion_job(job_data: dict):
             await db.commit()
 
             try:
-                # Extract text - using your existing extract_text utility
-                logger.info(f"Extracting text from file: {file_path}")
-                from app.utils.read_file import extract_text as extract_text_util
-                text = await extract_text_util(file_path)
-                logger.info(f"Extracted {len(text)} characters from file")
+                # Generate embedding for the chunk
+                log_embedding_operation(logger, "GENERATE", chunk_id, tenant_id)
+                embedding = await embedding_service.embed_text(chunk_content)
+                logger.info(f"Generated embedding with {len(embedding)} dimensions for chunk {chunk_id}")
 
-                # Generate embedding
-                log_embedding_operation(logger, "GENERATE", job.document_id, tenant_id)
-                embedding = await embedding_service.embed_text(text)
-                logger.info(f"Generated embedding with {len(embedding)} dimensions")
-
-                # Store in vector database
-                log_embedding_operation(logger, "STORE", job.document_id, tenant_id)
+                # Store in vector database with chunk-specific metadata
+                log_embedding_operation(logger, "STORE", chunk_id, tenant_id)
                 await vector_store.upsert_vector(
                     tenant_id=tenant_id,
-                    doc_id=job.document_id,
+                    doc_id=chunk_id,  # Use chunk_id as the unique identifier
                     embedding=embedding,
                     metadata={
                         "file_path": file_path,
-                        "document_id": job.document_id,
+                        "document_id": document_id,
+                        "chunk_id": chunk_id,
                         "tenant_id": tenant_id,
-                        "job_id": job_id
+                        "job_id": job_id,
+                        "chunk_index": chunk_index,
+                        "total_chunks": total_chunks,
+                        "chunk_type": chunk_type,
+                        "content_length": len(chunk_content)
                     },
                 )
-                logger.info(f"Successfully stored embedding in vector database")
+                logger.info(f"Successfully stored chunk embedding in vector database")
 
-                # Update document with extracted content
-                log_database_operation(logger, "SELECT", "documents", job.document_id)
-                document_result = await db.execute(
-                    select(Document).where(Document.id == job.document_id)
+                # Update chunk with embedding_id
+                log_database_operation(logger, "SELECT", "document_chunks", chunk_id)
+                chunk_result = await db.execute(
+                    select(Chunk).where(Chunk.id == chunk_id)
                 )
-                document = document_result.scalar_one_or_none()
-                if document:
-                    document.content = text
-                    document.embedding_id = job.document_id  # Use document_id as embedding_id for now
-                    log_database_operation(logger, "UPDATE", "documents", document.id)
-                    logger.info(f"Updated document {document.id} with extracted content")
+                chunk = chunk_result.scalar_one_or_none()
+                if chunk:
+                    chunk.embedding_id = chunk_id  # Use chunk_id as embedding_id
+                    log_database_operation(logger, "UPDATE", "document_chunks", chunk.id)
+                    logger.info(f"Updated chunk {chunk.id} with embedding_id")
 
                 # Mark job as complete
                 job.status = JobStatus.completed
                 job.error_message = None
                 log_database_operation(logger, "UPDATE", "embedding_jobs", job_id)
-                logger.info(f"Job {job_id} completed successfully")
+                logger.info(f"Chunk embedding job {job_id} completed successfully")
 
             except Exception as e:
                 job.status = JobStatus.failed
                 job.error_message = str(e)
-                logger.exception(f"Job {job_id} failed: {e}")
+                logger.exception(f"Chunk embedding job {job_id} failed: {e}")
 
             job.updated_at = datetime.utcnow()
             await db.commit()
 
         except Exception as e:
-            logger.error(f"Database error processing job {job_id}: {e}")
+            logger.error(f"Database error processing chunk job {job_id}: {e}")
             await db.rollback()

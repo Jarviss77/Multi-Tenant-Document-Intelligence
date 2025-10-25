@@ -16,3 +16,4 @@ class Tenant(Base):
 
     documents = relationship("Document", back_populates="tenant")
     embedding_jobs = relationship("EmbeddingJob", back_populates="tenant")
+    chunks = relationship("Chunk", back_populates="tenant")

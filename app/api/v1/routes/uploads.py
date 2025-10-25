@@ -1,15 +1,19 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from typing import List
 from app.services.storage_service import StorageService
+from app.services.chunking_service import ChunkingService
 from app.core.auth import get_tenant_from_api_key
 from app.core.rate_limiter import rate_limit_dependency
 from app.core.config import settings
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.embedding_job import EmbeddingJob, JobStatus
 from app.db.models.document import Document
+from app.db.models.chunks import Chunk
 from app.workers.queue_config import KafkaProducerService
 from app.db.sessions import get_db
 from app.utils.logger import get_logger, log_database_operation, log_kafka_message
+from app.utils.read_file import extract_text
+from sqlalchemy import select
 import os
 import uuid
 from datetime import datetime
@@ -19,8 +23,9 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 storage_service = StorageService()
+chunking_service = ChunkingService(db = get_db())
 
-@router.post("", dependencies=[Depends(rate_limit_dependency(action="uploads", max_requests=settings.UPLOADS_PER_MINUTE, window_seconds=60))])
+@router.post("/", dependencies=[Depends(rate_limit_dependency(action="uploads", max_requests=settings.UPLOADS_PER_MINUTE, window_seconds=60))])
 async def upload_file(
     file: UploadFile = File(...),
     tenant=Depends(get_tenant_from_api_key),
@@ -31,13 +36,19 @@ async def upload_file(
     file_path = await storage_service.save_file(tenant.id, file)
     logger.info(f"File saved to: {file_path}")
 
+    # Extract text content from the file
+    logger.info(f"Extracting text from file: {file_path}")
+    text_content = await extract_text(file_path)
+    logger.info(f"Extracted {len(text_content)} characters from file")
+
     # Create Document record
     document_id = str(uuid.uuid4())
     document = Document(
         id=document_id,
         tenant_id=tenant.id,
-        title=file.filename or "Untitled",
-        content="",  # Will be populated by the worker after processing
+        title=file.filename,
+        content=text_content,
+        chunking_strategy=settings.CHUNKING_STRATEGY,
         created_at=datetime.utcnow(),
     )
     db.add(document)
@@ -46,49 +57,80 @@ async def upload_file(
     await db.refresh(document)
     logger.info(f"Created document record: {document_id}")
 
-    # Create EmbeddingJob record
-    job_id = str(uuid.uuid4())
-    job = EmbeddingJob(
-        id=job_id,
-        document_id=document.id,
+    await chunking_service.create_chunks(
+        content=text_content,
+        document_id=document_id,
         tenant_id=tenant.id,
-        status=JobStatus.pending,
-        created_at=datetime.utcnow(),
+        strategy=settings.CHUNKING_STRATEGY,
     )
-    db.add(job)
-    log_database_operation(logger, "INSERT", "embedding_jobs", job_id)
-    await db.commit()
-    await db.refresh(job)
-    logger.info(f"Created embedding job: {job_id}")
 
-    # Publish job to Kafka for async ingestion
+    # Retrieve created chunks
+    chunks = await db.execute(
+        select(Chunk).where(
+            Chunk.document_id == document.id,
+            Chunk.tenant_id == tenant.id,
+        ).order_by(Chunk.chunk_index)
+    )
+
+    # Create embedding jobs for each chunk
+    embedding_jobs = []
+    producer = KafkaProducerService()
+    await producer.start()
+    
     try:
-        producer = KafkaProducerService()
-        await producer.start()
-        job_data = {
-            "job_id": job.id,
-            "tenant_id": tenant.id,
-            "document_id": document.id,
-            "file_path": file_path,
-        }
+        for chunk in chunks:
+            # Create EmbeddingJob record for each chunk
+            job_id = str(uuid.uuid4())
+            job = EmbeddingJob(
+                id=job_id,
+                document_id=document.id,
+                tenant_id=tenant.id,
+                chunk_id=chunk.id,
+                status=JobStatus.pending,
+                created_at=datetime.utcnow(),
+            )
+            db.add(job)
+            log_database_operation(logger, "INSERT", "embedding_jobs", job_id)
+            embedding_jobs.append(job)
 
-        log_kafka_message(logger, "PUBLISH", "document-intelligence", job.id)
+            # Publish job to Kafka for async processing
+            job_data = {
+                "job_id": job.id,
+                "tenant_id": tenant.id,
+                "document_id": document.id,
+                "chunk_id": chunk.id,
+                "chunk_content": chunk.content,
+                "chunk_index": chunk.chunk_index,
+                "total_chunks": chunk.total_chunks,
+                "chunk_type": chunk.chunk_type,
+                "file_path": file_path,
+            }
 
-        await producer.publish_job(job_data)
-        await producer.stop()
+            log_kafka_message(logger, "PUBLISH", "document-intelligence", job.id)
+            await producer.publish_job(job_data)
+            logger.info(f"Published embedding job {job.id} for chunk {chunk.id}")
 
-        logger.info(f"Successfully published job {job.id} to Kafka")
+        await db.commit()
+        logger.info(f"Created {len(embedding_jobs)} embedding jobs")
 
     except Exception as e:
-        logger.error(f"Error publishing to Kafka: {e}")
-        # Don't fail the upload if Kafka is down
+        logger.error(f"Error creating embedding jobs or publishing to Kafka: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to process document chunks")
+    
+    finally:
+        await producer.stop()
 
     # Respond to client immediately
     return {
-        "message": "File uploaded successfully and ingestion started",
+        "message": "File uploaded successfully and chunking completed",
         "file_path": file_path,
         "document_id": document.id,
-        "job_id": job.id,
+        "chunks_created": len(chunks),
+        "embedding_jobs_queued": len(embedding_jobs),
+        "chunking_strategy": settings.CHUNKING_STRATEGY,
+        "tenant_id": tenant.id,
+        "first-5_chunks": [chunk.content for chunk in chunks.scalars().all()[:5]]
     }
 
 

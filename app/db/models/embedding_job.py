@@ -16,9 +16,12 @@ class EmbeddingJob(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     document_id = Column(String, ForeignKey("documents.id", ondelete="CASCADE"))
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"))
+    chunk_id = Column(String, ForeignKey("chunks.id", ondelete="CASCADE"))
+
     status = Column(Enum(JobStatus), default=JobStatus.pending)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     tenant = relationship("Tenant", back_populates="embedding_jobs")
     document = relationship("Document", back_populates="embedding_jobs")
+    chunk = relationship("Chunk", back_populates="embedding_jobs")

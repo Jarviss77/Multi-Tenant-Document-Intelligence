@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     KAFKA_BROKER: str = os.getenv("KAFKA_BROKER", "localhost:9092")
     KAFKA_TOPIC: str = os.getenv("KAFKA_TOPIC", "document_events")
 
+    CHUNKING_STRATEGY: str = os.getenv("CHUNKING_STRATEGY", "fixed_size")
+
     class Config:
         env_file = ".env"
 

@@ -11,8 +11,10 @@ class Document(Base):
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"))
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
-    embedding_id = Column(String, nullable=True)  # links to vector store
+    chunking_strategy = Column(String, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     tenant = relationship("Tenant", back_populates="documents")
     embedding_jobs = relationship("EmbeddingJob", back_populates="document")
+    chunks = relationship("Chunk", back_populates="document", cascade="all, delete-orphan")
