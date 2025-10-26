@@ -1,6 +1,6 @@
 import asyncio
-from app.workers.queue_config import KafkaConsumerService
-from app.workers.tasks import process_ingestion_job
+from app.workers.v1.queue_config import KafkaConsumerService
+from app.workers.v1.tasks import process_ingestion_job
 from app.utils.logger import get_logger, setup_logging
 
 setup_logging(level='INFO', console=True, file=True)

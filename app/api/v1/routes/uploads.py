@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.embedding_job import EmbeddingJob, JobStatus
 from app.db.models.document import Document
 from app.db.models.chunks import Chunk
-from app.workers.queue_config import KafkaProducerService
+from app.workers.v1.queue_config import KafkaProducerService
 from app.db.sessions import get_db
 from app.utils.logger import get_logger, log_database_operation, log_kafka_message
 from app.utils.read_file import extract_text

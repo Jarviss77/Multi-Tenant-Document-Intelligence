@@ -6,7 +6,7 @@ from app.core.auth import get_tenant_from_api_key
 from app.core.rate_limiter import rate_limit_dependency
 from app.core.config import settings
 from app.services.search_service import SearchService
-from app.utils.logger import get_logger, log_request
+from app.utils.logger import get_logger
 from pydantic import BaseModel, Field
 
 logger = get_logger(__name__)
@@ -14,7 +14,6 @@ router = APIRouter()
 
 # Initialize search service
 search_service = SearchService()
-
 
 class SearchRequest(BaseModel):
     query: str = Field(..., description="Search query text", min_length=1, max_length=1000)
