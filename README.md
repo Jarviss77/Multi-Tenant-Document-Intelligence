@@ -175,22 +175,19 @@ make rebuild       # Rebuild and restart
 
 - `POST /api/v1/tenants` - Create a new tenant
 - `GET /api/v1/tenants/{tenant_id}` - Get tenant details
-- `GET /api/v1/tenants` - List all tenants
 
 ### Documents
 
-- `POST /api/v1/documents/upload` - Upload a document
-- `GET /api/v1/documents/{document_id}` - Get document details
-- `GET /api/v1/documents` - List documents for a tenant
-- `DELETE /api/v1/documents/{document_id}` - Delete a document
+- `POST /api/v1/uploads` - Upload a document and ingestion 
+- `GET /api/v1/uploads/get` - List documents for a tenant
 
 ### Search
 
-- `POST /api/v1/search` - Semantic search across documents
+- `POST /api/v1/search/semantic` - Semantic search across documents
 
 ### Health
 
-- `GET /health` - Health check
+- `GET /api/v1/health` - Health check
 - `GET /metrics` - Prometheus metrics
 
 ## Monitoring
