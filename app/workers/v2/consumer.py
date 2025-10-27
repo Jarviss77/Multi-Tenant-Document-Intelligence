@@ -1,10 +1,19 @@
 import json
 import asyncio
+import time
 from typing import Optional, Dict, Any
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
 from app.core.config import settings
 from app.utils.logger import get_logger
 from app.workers.v2.kafka_config import KafkaTopicManager
+from app.utils.metrics import (
+    kafka_messages_consumed,
+    kafka_messages_processed,
+    kafka_messages_failed,
+    kafka_message_processing_duration,
+    kafka_messages_in_flight,
+    kafka_messages_produced
+)
 
 logger = get_logger("workers.v2.queue")
 
@@ -104,6 +113,9 @@ class KafkaConsumer:
                 if not self._is_running:
                     break
 
+                # Track consumed message
+                kafka_messages_consumed.labels(consumer_group=self.group_id, topic=msg.topic).inc()
+                
                 await self._process_message_with_retry(msg, process_func)
 
         except Exception as e:
@@ -141,12 +153,31 @@ class KafkaConsumer:
 
                 # Count as failed and commit offset so we don't re-process
                 self._failed_messages += 1
+                kafka_messages_failed.labels(consumer_group=self.group_id, topic=msg.topic, error_type='validation').inc()
                 await self.consumer.commit()
                 return
 
             # Process the message
-            await process_func(msg.value)
-            self._processed_messages += 1
+            start_time = time.time()
+            
+            # Increment in-flight gauge
+            kafka_messages_in_flight.labels(consumer_group=self.group_id, topic=msg.topic).inc()
+            
+            try:
+                await process_func(msg.value)
+                self._processed_messages += 1
+                
+                # Record success metrics
+                kafka_messages_processed.labels(consumer_group=self.group_id, topic=msg.topic).inc()
+            except Exception as e:
+                self._failed_messages += 1
+                kafka_messages_failed.labels(consumer_group=self.group_id, topic=msg.topic, error_type=type(e).__name__).inc()
+                raise
+            finally:
+                # Record duration and decrement in-flight
+                duration = time.time() - start_time
+                kafka_message_processing_duration.labels(consumer_group=self.group_id, topic=msg.topic).observe(duration)
+                kafka_messages_in_flight.labels(consumer_group=self.group_id, topic=msg.topic).dec()
 
             # Commit offset only after successful processing
             await self.consumer.commit()

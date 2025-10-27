@@ -6,6 +6,7 @@ from aiokafka.errors import KafkaError
 from app.utils.logger import get_logger, log_kafka_message
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.core.config import settings
+from app.utils.metrics import kafka_messages_produced, kafka_produce_errors
 
 logger = get_logger("producer.v2.queue")
 
@@ -70,6 +71,9 @@ class KafkaProducer:
             # Send and wait for confirmation
             future = await self.producer.send_and_wait(topic, msg)
 
+            # Record metrics
+            kafka_messages_produced.labels(producer="embedding_worker", topic=topic).inc()
+
             log_kafka_message(logger, "PUBLISH", topic, job_id)
             logger.info(
                 f"Published job to {topic}: {job_id} (partition: {future.partition}, offset: {future.offset})")
@@ -78,9 +82,11 @@ class KafkaProducer:
 
         except KafkaError as e:
             logger.error(f"Kafka error publishing job {job_id}: {e}")
+            kafka_produce_errors.labels(producer="embedding_worker", topic=topic, error_type="KafkaError").inc()
             raise
         except Exception as e:
             logger.error(f"Unexpected error publishing job {job_id}: {e}")
+            kafka_produce_errors.labels(producer="embedding_worker", topic=topic, error_type=type(e).__name__).inc()
             raise
 
     async def send_to_dlq(self, job_data: dict, error: str):

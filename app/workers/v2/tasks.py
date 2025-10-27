@@ -14,7 +14,15 @@ from app.db.models.embedding_job import EmbeddingJob, JobStatus
 from app.db.models.document import Document
 from app.db.models.chunks import Chunk
 from app.utils.logger import get_logger, log_embedding_operation, log_database_operation
+from app.utils.metrics import (
+    tasks_processed_total,
+    tasks_processing_duration,
+    tasks_in_progress,
+    embedding_generation_total,
+    embedding_generation_duration
+)
 import asyncio
+import time
 
 load_all_models()
 
@@ -86,6 +94,7 @@ class TaskProcessor:
 
         except Exception as e:
             logger.error(f"Failed to generate embedding for chunk {chunk_id}: {e}")
+            embedding_generation_total.labels(status='failed').inc()
             raise
 
     @retry(
@@ -141,70 +150,94 @@ class TaskProcessor:
         # Validate job data
         if not await self._validate_job_data(job_data):
             self._failed_count += 1
+            tasks_processed_total.labels(status='failed').inc()
             return
 
-        async with AsyncSessionLocal() as db:
-            try:
-                # Update job status to processing
-                job = await self._update_job_status(db, job_id, JobStatus.processing)
-                if not job:
+        # Track task in progress
+        tasks_in_progress.inc()
+        
+        try:
+            async with AsyncSessionLocal() as db:
+                start_time = time.time()
+                
+                try:
+                    # Update job status to processing
+                    job = await self._update_job_status(db, job_id, JobStatus.processing)
+                    if not job:
+                        self._failed_count += 1
+                        tasks_processed_total.labels(status='failed').inc()
+                        return
+
+                    # Generate embedding
+                    embedding_start = time.time()
+                    embedding = await self._generate_embedding(chunk_content, chunk_id, tenant_id)
+                    embedding_duration = time.time() - embedding_start
+                    
+                    # Record embedding metrics
+                    embedding_generation_total.labels(status='success').inc()
+                    embedding_generation_duration.observe(embedding_duration)
+
+                    # Prepare metadata for vector store
+                    metadata = {
+                        "file_path": file_path,
+                        "document_id": document_id,
+                        "chunk_id": chunk_id,
+                        "tenant_id": tenant_id,
+                        "job_id": job_id,
+                        "chunk_index": chunk_index,
+                        "chunk_size": chunk_size,
+                        "content_length": len(chunk_content),
+                        "processed_at": datetime.utcnow().isoformat()
+                    }
+
+                    # Store in vector database
+                    await self._store_embedding(tenant_id, chunk_id, embedding, metadata)
+
+                    # Update chunk with embedding_id
+                    try:
+                        log_database_operation(logger, "SELECT", "document_chunks", chunk_id)
+                        chunk_result = await db.execute(
+                            select(Chunk).where(Chunk.id == chunk_id)
+                        )
+                        chunk = chunk_result.scalar_one_or_none()
+
+                        if chunk:
+                            chunk.embedding_id = chunk_id
+                            log_database_operation(logger, "UPDATE", "document_chunks", chunk.id)
+                            logger.info(f"Updated chunk {chunk.id} with embedding_id")
+                        else:
+                            logger.warning(f"Chunk {chunk_id} not found in database")
+
+                    except SQLAlchemyError as e:
+                        logger.error(f"Failed to update chunk {chunk_id}: {e}")
+                        # Don't fail the entire job if chunk update fails
+
+                    # Mark job as complete
+                    await self._update_job_status(db, job_id, JobStatus.completed)
+                    self._processed_count += 1
+                    
+                    # Record metrics
+                    tasks_processed_total.labels(status='completed').inc()
+                    total_duration = time.time() - start_time
+                    tasks_processing_duration.labels(operation='total').observe(total_duration)
+
+                    logger.info(f"🎉 Chunk embedding job {job_id} completed successfully")
+
+                except Exception as e:
                     self._failed_count += 1
-                    return
+                    self._last_error = str(e)
+                    
+                    # Record failure metrics
+                    tasks_processed_total.labels(status='failed').inc()
 
-                # Generate embedding
-                embedding = await self._generate_embedding(chunk_content, chunk_id, tenant_id)
-
-                # Prepare metadata for vector store
-                metadata = {
-                    "file_path": file_path,
-                    "document_id": document_id,
-                    "chunk_id": chunk_id,
-                    "tenant_id": tenant_id,
-                    "job_id": job_id,
-                    "chunk_index": chunk_index,
-                    "chunk_size": chunk_size,
-                    "content_length": len(chunk_content),
-                    "processed_at": datetime.utcnow().isoformat()
-                }
-
-                # Store in vector database
-                await self._store_embedding(tenant_id, chunk_id, embedding, metadata)
-
-                # Update chunk with embedding_id
-                try:
-                    log_database_operation(logger, "SELECT", "document_chunks", chunk_id)
-                    chunk_result = await db.execute(
-                        select(Chunk).where(Chunk.id == chunk_id)
-                    )
-                    chunk = chunk_result.scalar_one_or_none()
-
-                    if chunk:
-                        chunk.embedding_id = chunk_id
-                        log_database_operation(logger, "UPDATE", "document_chunks", chunk.id)
-                        logger.info(f"Updated chunk {chunk.id} with embedding_id")
-                    else:
-                        logger.warning(f"Chunk {chunk_id} not found in database")
-
-                except SQLAlchemyError as e:
-                    logger.error(f"Failed to update chunk {chunk_id}: {e}")
-                    # Don't fail the entire job if chunk update fails
-
-                # Mark job as complete
-                await self._update_job_status(db, job_id, JobStatus.completed)
-                self._processed_count += 1
-
-                logger.info(f"🎉 Chunk embedding job {job_id} completed successfully")
-
-            except Exception as e:
-                self._failed_count += 1
-                self._last_error = str(e)
-
-                try:
-                    # Update job status to failed
-                    await self._update_job_status(db, job_id, JobStatus.failed, str(e))
-                    logger.exception(f"Chunk embedding job {job_id} failed: {e}")
-                except Exception as db_error:
-                    logger.error(f"Failed to update job status for {job_id}: {db_error}")
+                    try:
+                        # Update job status to failed
+                        await self._update_job_status(db, job_id, JobStatus.failed, str(e))
+                        logger.exception(f"Chunk embedding job {job_id} failed: {e}")
+                    except Exception as db_error:
+                        logger.error(f"Failed to update job status for {job_id}: {db_error}")
+        finally:
+            tasks_in_progress.dec()
 
     def get_stats(self) -> Dict[str, Any]:
         total = self._processed_count + self._failed_count
