@@ -82,7 +82,7 @@ A scalable document intelligence system with multi-tenant support, built with Fa
 - **Grafana**: http://localhost:3000 (admin/admin)
 - **Prometheus**: http://localhost:9090
 
-For detailed Docker setup instructions, see [DOCKER_SETUP.md](DOCKER_SETUP.md)
+For detailed Docker setup instructions, see [DOCKER_SETUP.md](docs/DOCKER_SETUP.md)
 
 ## Development Setup (without Docker)
 
@@ -98,7 +98,7 @@ For detailed Docker setup instructions, see [DOCKER_SETUP.md](DOCKER_SETUP.md)
 1. **Create virtual environment**:
    ```bash
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv/bin/activate
    ```
 
 2. **Install dependencies**:

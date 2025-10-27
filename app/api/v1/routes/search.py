@@ -6,7 +6,7 @@ from app.core.rate_limiter import rate_limit_dependency
 from app.core.config import settings
 from app.services.search_service import SearchService
 from app.utils.logger import get_logger
-from app.utils.dto.document import SearchRequest, ChunkSearchResponse, ChunkSearchResult, SearchStats
+from app.utils.dto.search import SearchRequest, ChunkSearchResponse, ChunkSearchResult, SearchStats
 
 logger = get_logger(__name__)
 router = APIRouter()
