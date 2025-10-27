@@ -7,28 +7,12 @@ from app.db.models.tenant import Tenant
 from app.core.security import generate_api_key, generate_hashed_api_key, create_jwt_token
 from app.core.auth import get_payload_from_jwt_token
 from app.utils.logger import get_logger
+from app.utils.dto.tenant import TenantCreate, TenantResponse
 import uuid
 
 logger = get_logger(__name__)
 
 router = APIRouter()
-
-
-class TenantCreate(BaseModel):
-    name: str
-    email: EmailStr
-    password: str
-
-
-class TenantResponse(BaseModel):
-    id: str
-    name: str
-    email: str
-    api_key: str
-    jwt_token: str
-
-    model_config = ConfigDict(from_attributes=True)
-
 
 @router.post("/onboard", response_model=TenantResponse, summary="Register tenant and generate API key")
 async def onboard_tenant(payload: TenantCreate, db: AsyncSession = Depends(get_db)):

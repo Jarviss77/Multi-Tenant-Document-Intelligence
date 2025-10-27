@@ -4,21 +4,10 @@ from sqlalchemy.future import select
 from app.db.sessions import get_db
 from app.db.models.document import Document
 from app.core.auth import get_tenant_from_api_key
-from pydantic import BaseModel, ConfigDict
+from app.utils.dto.document import DocumentCreate, DocumentResponse
 import uuid
 
 router = APIRouter()
-
-class DocumentCreate(BaseModel):
-    title: str
-    content: str
-
-class DocumentResponse(BaseModel):
-    id: str
-    title: str
-    content: str
-
-    model_config = ConfigDict(from_attributes=True)
 
 @router.post("/", response_model=DocumentResponse)
 async def upload_document(payload: DocumentCreate, tenant=Depends(get_tenant_from_api_key), db: AsyncSession = Depends(get_db)):
