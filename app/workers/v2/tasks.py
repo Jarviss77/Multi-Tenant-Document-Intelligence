@@ -221,7 +221,7 @@ class TaskProcessor:
                     total_duration = time.time() - start_time
                     tasks_processing_duration.labels(operation='total').observe(total_duration)
 
-                    logger.info(f"🎉 Chunk embedding job {job_id} completed successfully")
+                    logger.info(f"Chunk embedding job {job_id} completed successfully")
 
                 except Exception as e:
                     self._failed_count += 1

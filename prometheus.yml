@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'fastapi-app'
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['app:8000']
+        labels:
+          service: 'document-intelligence'
+
+  - job_name: 'worker-v2'
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['worker:8001']
+        labels:
+          service: 'worker'
+          worker_type: 'embedding'
+

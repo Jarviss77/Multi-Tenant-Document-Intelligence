@@ -102,8 +102,8 @@ class KafkaProducer:
 
         try:
             await self.publish_job(dlq_data, TOPIC_DLQ)
-            logger.warning(f"📨 Sent job {job_data.get('job_id')} to DLQ: {error}")
+            logger.warning(f"Sent job {job_data.get('job_id')} to DLQ: {error}")
         except Exception as e:
-            logger.error(f"💥 Failed to send job to DLQ: {e}")
+            logger.error(f"Failed to send job to DLQ: {e}")
 
 KafkaProducerService = KafkaProducer
