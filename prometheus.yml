@@ -19,4 +19,3 @@ scrape_configs:
         labels:
           service: 'worker'
           worker_type: 'embedding'
-
