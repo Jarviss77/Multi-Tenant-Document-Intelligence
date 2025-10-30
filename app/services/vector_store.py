@@ -21,6 +21,10 @@ class PineconeVectorStore:
             }
         ])
 
+    async def delete_document_vector(self, tenant_id: str, doc_id: str):
+        vector_id = f"{tenant_id}:{doc_id}"
+        self.index.delete(ids=[vector_id])
+
 
     async def query_vectors(self, vector, top_k=10, filter=None):
         try:

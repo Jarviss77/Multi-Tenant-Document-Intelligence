@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.embedding_job import EmbeddingJob, JobStatus
 from app.db.models.document import Document
 from app.db.models.chunks import Chunk
-from app.workers.v1.queue_config import KafkaProducerService
+from app.workers.v2.producer import KafkaProducerService
 from app.db.sessions import get_db
 from app.utils.logger import get_logger, log_database_operation, log_kafka_message
 from app.utils.read_file import extract_text
@@ -48,6 +48,7 @@ async def upload_file(
         tenant_id=tenant.id,
         title=file.filename,
         content=text_content,
+        file_path=file_path,
         chunking_strategy=settings.CHUNKING_STRATEGY,
         created_at=datetime.utcnow(),
     )
@@ -78,7 +79,11 @@ async def upload_file(
     # Create embedding jobs for each chunk
     embedding_jobs = []
     producer = KafkaProducerService()
-    await producer.start()
+    try:
+        await producer.start()
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=503, detail="Kafka producer unavailable")
     
     try:
         for chunk in chunks:

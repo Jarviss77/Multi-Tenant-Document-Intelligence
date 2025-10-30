@@ -1,109 +1,81 @@
 import json
-import asyncio
-from typing import Optional
+import base64
+from typing import Any
+from datetime import datetime, date
+from uuid import UUID
+from enum import Enum
+
 from aiokafka import AIOKafkaProducer
-from aiokafka.errors import KafkaError
-from app.utils.logger import get_logger, log_kafka_message
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.core.config import settings
-from app.utils.metrics import kafka_messages_produced, kafka_produce_errors
+from app.utils.logger import get_logger
+from app.core.config import settings
 
 logger = get_logger("producer.v2.queue")
 
+KAFKA_TOPIC = settings.KAFKA_TOPIC
 KAFKA_BROKER = settings.KAFKA_BROKER
-TOPIC_INGESTION = settings.KAFKA_TOPIC
-TOPIC_DLQ = f"{TOPIC_INGESTION}.dlq"  # Dead Letter Queue
-TOPIC_RETRY = f"{TOPIC_INGESTION}.retry"  # Retry topic
 
-class KafkaProducer:
+def _to_jsonable(obj: Any) -> Any:
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    if isinstance(obj, (bytes, bytearray, memoryview)):
+        buf = obj if isinstance(obj, (bytes, bytearray)) else obj.tobytes()
+        return base64.b64encode(bytes(buf)).decode("ascii")
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, UUID):
+        return str(obj)
+    if isinstance(obj, Enum):
+        return obj.value
+    if isinstance(obj, dict):
+        return {str(k): _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_to_jsonable(v) for v in obj]
+    return str(obj)
 
-    def __init__(self):
-        self.producer: Optional[AIOKafkaProducer] = None
-        self._is_connected = False
+class KafkaProducerService:
+    def __init__(self) -> None:
+        self.producer: AIOKafkaProducer | None = None
+        self.bootstrap_servers = (
+            KAFKA_BROKER
+        )
+        self.topic = KAFKA_TOPIC
 
-    async def start(self):
+    async def start(self) -> None:
+        if self.producer:
+            return
         try:
             self.producer = AIOKafkaProducer(
-                bootstrap_servers=KAFKA_BROKER,
-                enable_idempotence=True,  # Prevent duplicate messages
-                acks='all',  # Wait for all replicas
-                retries=5,  # Retry on transient errors
-                max_in_flight_requests_per_connection=1,  # Maintain ordering
-                compression_type='gzip'  # Compress messages
+                bootstrap_servers=self.bootstrap_servers,
+                acks="all",
+                linger_ms=5,
+                retry_backoff_ms=200,
+                request_timeout_ms=30000,
+                value_serializer=lambda v: json.dumps(
+                    _to_jsonable(v), ensure_ascii=False, separators=(",", ":")
+                ).encode("utf-8"),
+                key_serializer=lambda k: (
+                    k.encode("utf-8") if isinstance(k, str) else k
+                ),
             )
             await self.producer.start()
-            self._is_connected = True
-            logger.info("Kafka producer started successfully")
+            logger.info("Kafka producer started")
         except Exception as e:
             logger.error(f"Failed to start Kafka producer: {e}")
+            self.producer = None
             raise
 
-    async def stop(self):
-        if self.producer and self._is_connected:
+    async def publish_job(self, payload: dict, key: str | None = None) -> None:
+        if not self.producer:
+            raise RuntimeError("Kafka producer not started")
+        try:
+            await self.producer.send_and_wait(self.topic, value=payload, key=key)
+        except Exception as e:
+            logger.error(f"Unexpected error publishing job {payload.get('job_id')}: {e}")
+            raise
+
+    async def stop(self) -> None:
+        if self.producer:
             await self.producer.stop()
-            self._is_connected = False
+            self.producer = None
             logger.info("Kafka producer stopped")
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=5),
-        retry=retry_if_exception_type((KafkaError, ConnectionError))
-    )
-    async def publish_job(self, job_data: dict, topic: str = TOPIC_INGESTION):
-        if not self._is_connected or not self.producer:
-            raise RuntimeError("Kafka producer is not connected")
-
-        job_id = job_data.get('job_id', 'unknown')
-
-        try:
-            # Add metadata to job data
-            enhanced_job_data = {
-                **job_data,
-                "_metadata": {
-                    "published_at": asyncio.get_event_loop().time(),
-                    "producer_id": "embedding_worker",
-                    "attempt": 1  # First attempt
-                }
-            }
-
-            msg = json.dumps(enhanced_job_data).encode("utf-8")
-
-            # Send and wait for confirmation
-            future = await self.producer.send_and_wait(topic, msg)
-
-            # Record metrics
-            kafka_messages_produced.labels(producer="embedding_worker", topic=topic).inc()
-
-            log_kafka_message(logger, "PUBLISH", topic, job_id)
-            logger.info(
-                f"Published job to {topic}: {job_id} (partition: {future.partition}, offset: {future.offset})")
-
-            return future
-
-        except KafkaError as e:
-            logger.error(f"Kafka error publishing job {job_id}: {e}")
-            kafka_produce_errors.labels(producer="embedding_worker", topic=topic, error_type="KafkaError").inc()
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error publishing job {job_id}: {e}")
-            kafka_produce_errors.labels(producer="embedding_worker", topic=topic, error_type=type(e).__name__).inc()
-            raise
-
-    async def send_to_dlq(self, job_data: dict, error: str):
-        dlq_data = {
-            **job_data,
-            "dlq_reason": error,
-            "dlq_timestamp": asyncio.get_event_loop().time(),
-            "_metadata": {
-                **job_data.get("_metadata", {}),
-                "dlq": True
-            }
-        }
-
-        try:
-            await self.publish_job(dlq_data, TOPIC_DLQ)
-            logger.warning(f"Sent job {job_data.get('job_id')} to DLQ: {error}")
-        except Exception as e:
-            logger.error(f"Failed to send job to DLQ: {e}")
-
-KafkaProducerService = KafkaProducer

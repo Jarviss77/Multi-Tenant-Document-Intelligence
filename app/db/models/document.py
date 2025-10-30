@@ -10,6 +10,7 @@ class Document(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"))
     title = Column(String, nullable=False)
+    file_path = Column(String, nullable=True)
     content = Column(Text, nullable=False)
     chunking_strategy = Column(String, nullable=True)
 
