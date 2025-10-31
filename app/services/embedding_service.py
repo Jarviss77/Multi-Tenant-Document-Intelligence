@@ -22,7 +22,7 @@ class GeminiEmbeddingService:
 
         try:
             # Run blocking genai operation in thread executor
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 None,
                 partial(
@@ -40,9 +40,11 @@ class GeminiEmbeddingService:
 
     async def embed_batch(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for multiple texts concurrently for better performance."""
-        import asyncio
-        
         # Process all embeddings concurrently instead of sequentially
+        # Use return_exceptions=True to handle individual failures gracefully
         embedding_tasks = [self.embed_text(text) for text in texts]
-        embeddings = await asyncio.gather(*embedding_tasks, return_exceptions=False)
-        return embeddings
+        embeddings = await asyncio.gather(*embedding_tasks, return_exceptions=True)
+        
+        # Filter out exceptions and return successful embeddings
+        # Failed embeddings will be empty lists (as returned by embed_text on error)
+        return [emb if not isinstance(emb, Exception) else [] for emb in embeddings]

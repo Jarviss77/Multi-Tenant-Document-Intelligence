@@ -17,7 +17,7 @@ class PineconeVectorStore:
         metadata["doc_id"] = doc_id
         
         # Run blocking Pinecone operation in thread executor
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             None,
             partial(
@@ -35,7 +35,7 @@ class PineconeVectorStore:
         vector_id = f"{tenant_id}:{doc_id}"
         
         # Run blocking Pinecone operation in thread executor
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             None,
             partial(self.index.delete, ids=[vector_id])
@@ -45,7 +45,7 @@ class PineconeVectorStore:
         """Query vectors from Pinecone using thread executor to avoid blocking."""
         try:
             # Run blocking Pinecone operation in thread executor
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             results = await loop.run_in_executor(
                 None,
                 partial(
