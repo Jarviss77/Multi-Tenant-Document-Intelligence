@@ -11,6 +11,7 @@ A scalable document intelligence system with multi-tenant support, built with Fa
 - **Rate Limiting**: Redis-based rate limiting per tenant
 - **Monitoring**: Prometheus metrics and Grafana dashboards
 - **RESTful API**: FastAPI with automatic documentation
+- **Performance Optimized**: Concurrent processing, bulk operations, and database indexing
 
 ## Tech Stack
 
@@ -22,6 +23,17 @@ A scalable document intelligence system with multi-tenant support, built with Fa
 - **Embeddings**: Google Gemini API
 - **Monitoring**: Prometheus + Grafana
 - **Containerization**: Docker & Docker Compose
+
+## Performance Features
+
+- **Concurrent Embedding Generation**: Process multiple embeddings simultaneously
+- **Bulk Database Operations**: Optimize inserts for chunks and jobs
+- **Database Indexing**: Strategic indexes on frequently queried fields
+- **Non-Blocking I/O**: All external API calls run in thread executors
+- **Resource Caching**: Spacy models cached to avoid reloading
+- **Optimized Queries**: COUNT queries and selective field loading
+
+See [Performance Optimizations](docs/PERFORMANCE_OPTIMIZATIONS.md) for detailed information.
 
 ## Architecture Overview
 ![Architecture Diagram](docs/images/architecture.png)
