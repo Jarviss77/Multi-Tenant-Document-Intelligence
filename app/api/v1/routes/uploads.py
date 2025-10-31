@@ -86,8 +86,9 @@ async def upload_file(
         raise HTTPException(status_code=503, detail="Kafka producer unavailable")
     
     try:
+        # Create all EmbeddingJob records for bulk insert
+        jobs_to_add = []
         for chunk in chunks:
-            # Create EmbeddingJob record for each chunk
             job_id = str(uuid.uuid4())
             job = EmbeddingJob(
                 id=job_id,
@@ -97,16 +98,16 @@ async def upload_file(
                 status=JobStatus.pending,
                 created_at=datetime.utcnow(),
             )
-            logger.info(f"Created job record: {job_id}")
-            db.add(job)
+            jobs_to_add.append(job)
             embedding_jobs.append((job, chunk))
 
+        # Bulk insert all embedding jobs at once
+        db.add_all(jobs_to_add)
         await db.commit()
         await db.refresh(document)
-        log_database_operation(logger, "INSERT", "embedding_jobs", job_id)
+        log_database_operation(logger, "BULK_INSERT", "embedding_jobs", f"{len(jobs_to_add)}_jobs")
 
-
-        # Publish job to Kafka for async processing
+        # Publish jobs to Kafka for async processing
         for job, chunk in embedding_jobs:
             job_data = {
                 "job_id": job.id,
@@ -122,10 +123,8 @@ async def upload_file(
 
             log_kafka_message(logger, "PUBLISH", "document-intelligence", job.id)
             await producer.publish_job(job_data)
-            logger.info(f"Published embedding job {job.id} for chunk {chunk.id}")
 
-
-        logger.info(f"Created {len(embedding_jobs)} embedding jobs")
+        logger.info(f"Created and published {len(embedding_jobs)} embedding jobs")
 
     except Exception as e:
         logger.error(f"Error creating embedding jobs or publishing to Kafka: {e}")

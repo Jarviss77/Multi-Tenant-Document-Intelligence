@@ -1,6 +1,8 @@
 from pinecone import Pinecone
 from app.core.config import settings
 from typing import List, Tuple
+import asyncio
+from functools import partial
 
 class PineconeVectorStore:
 
@@ -9,29 +11,49 @@ class PineconeVectorStore:
         self.index = pc.Index(settings.PINECONE_INDEX_NAME)
 
     async def upsert_vector(self, tenant_id: str, doc_id: str, embedding: List[float], metadata: dict = None):
-
+        """Upsert vector to Pinecone using thread executor to avoid blocking."""
         metadata = metadata or {}
         metadata["tenant_id"] = tenant_id
         metadata["doc_id"] = doc_id
-        self.index.upsert([
-            {
-                "id": f"{tenant_id}:{doc_id}",
-                "values": embedding,
-                "metadata": metadata
-            }
-        ])
+        
+        # Run blocking Pinecone operation in thread executor
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            partial(
+                self.index.upsert,
+                vectors=[{
+                    "id": f"{tenant_id}:{doc_id}",
+                    "values": embedding,
+                    "metadata": metadata
+                }]
+            )
+        )
 
     async def delete_document_vector(self, tenant_id: str, doc_id: str):
+        """Delete vector from Pinecone using thread executor to avoid blocking."""
         vector_id = f"{tenant_id}:{doc_id}"
-        self.index.delete(ids=[vector_id])
-
+        
+        # Run blocking Pinecone operation in thread executor
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            partial(self.index.delete, ids=[vector_id])
+        )
 
     async def query_vectors(self, vector, top_k=10, filter=None):
+        """Query vectors from Pinecone using thread executor to avoid blocking."""
         try:
-            results = self.index.query(
-                vector=vector,
-                top_k=top_k,
-                filter=filter
+            # Run blocking Pinecone operation in thread executor
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(
+                None,
+                partial(
+                    self.index.query,
+                    vector=vector,
+                    top_k=top_k,
+                    filter=filter
+                )
             )
             return results.matches
         except Exception as e:

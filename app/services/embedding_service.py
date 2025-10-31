@@ -1,6 +1,8 @@
 import google.generativeai as genai
 from app.core.config import settings
 from typing import List
+import asyncio
+from functools import partial
 
 GEMINI_API_KEY = settings.GEMINI_API_KEY
 if not GEMINI_API_KEY:
@@ -14,14 +16,21 @@ class GeminiEmbeddingService:
         self.model = model
 
     async def embed_text(self, text: str) -> List[float]:
+        """Generate embedding for text using thread executor to avoid blocking."""
         if not text.strip():
             return []
 
         try:
-            result = genai.embed_content(
-                model=self.model,
-                content=text,
-                task_type="retrieval_document"
+            # Run blocking genai operation in thread executor
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                partial(
+                    genai.embed_content,
+                    model=self.model,
+                    content=text,
+                    task_type="retrieval_document"
+                )
             )
 
             return result['embedding']
