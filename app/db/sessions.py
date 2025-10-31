@@ -3,7 +3,7 @@ from app.core.config import settings
 
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=True,
+    echo=False,  # Disable SQL query logging for better performance
     pool_size=5,
     max_overflow=10
 )

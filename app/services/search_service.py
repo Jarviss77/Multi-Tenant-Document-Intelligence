@@ -177,13 +177,13 @@ class SearchService:
         """
         try:
             async with AsyncSessionLocal() as db:
-                # Count total documents for tenant
+                # Count total documents for tenant using efficient COUNT query
+                from sqlalchemy import func
                 log_database_operation(logger, "COUNT", "documents", tenant_id)
                 result = await db.execute(
-                    select(Document).where(Document.tenant_id == tenant_id)
+                    select(func.count(Document.id)).where(Document.tenant_id == tenant_id)
                 )
-                documents = result.scalars().all()
-                total_documents = len(documents)
+                total_documents = result.scalar()
                 
                 logger.info(f"Found {total_documents} documents for tenant {tenant_id}")
                 

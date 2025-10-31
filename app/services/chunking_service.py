@@ -22,6 +22,8 @@ class ChunkingService:
 
         chunks_data = chunking_strategy.chunk_document(text=content, strategy=strategy)
 
+        # Prepare all chunks for bulk insert - more efficient than individual inserts
+        chunks_to_add = []
         for i, chunk_data in enumerate(chunks_data):
             chunk = Chunk(
                 id=str(uuid.uuid4()),
@@ -34,10 +36,14 @@ class ChunkingService:
                 size=chunks_data[i]['chunk_size'],
                 created_at=datetime.utcnow(),
             )
-            self.db.add(chunk)
+            chunks_to_add.append(chunk)
 
+        # Bulk insert all chunks at once
+        self.db.add_all(chunks_to_add)
         await self.db.commit()
-        log_database_operation(logger, "INSERT", "document_chunks", chunk.id)
+        
+        if chunks_to_add:
+            log_database_operation(logger, "BULK_INSERT", "document_chunks", f"{len(chunks_to_add)}_chunks")
         logger.info(f"Saved {len(chunks_data)} chunks to database")
 
         await self.db.refresh(document)

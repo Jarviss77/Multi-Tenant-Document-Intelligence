@@ -35,8 +35,15 @@ class FixedSizeChunking(ChunkingStrategy):
 
 
 class SentenceAwareChunking(ChunkingStrategy):
+    # Class-level cache for spacy tokenizer to avoid reloading the model
+    _tokenizer_cache = {}
+    
     def __init__(self, lightweight: bool = False):
-        self.tokenizer = Tokenizer(lightweight=lightweight)
+        # Use cached tokenizer if available
+        cache_key = f"lightweight_{lightweight}"
+        if cache_key not in SentenceAwareChunking._tokenizer_cache:
+            SentenceAwareChunking._tokenizer_cache[cache_key] = Tokenizer(lightweight=lightweight)
+        self.tokenizer = SentenceAwareChunking._tokenizer_cache[cache_key]
 
     def chunk(self, text: str, chunk_size: int = 100, overlap: int = 20) -> List[Dict[str, Any]]:
         if not text or not text.strip():

@@ -30,8 +30,10 @@ class GeminiEmbeddingService:
             return []
 
     async def embed_batch(self, texts: List[str]) -> List[List[float]]:
-        embeddings = []
-        for text in texts:
-            embedding = await self.embed_text(text)
-            embeddings.append(embedding)
+        """Generate embeddings for multiple texts concurrently for better performance."""
+        import asyncio
+        
+        # Process all embeddings concurrently instead of sequentially
+        embedding_tasks = [self.embed_text(text) for text in texts]
+        embeddings = await asyncio.gather(*embedding_tasks, return_exceptions=False)
         return embeddings
